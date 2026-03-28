@@ -26,34 +26,34 @@ pipeline {
 
         stage('Tag Docker Image') {
             steps {
-                bat '''
+                bat """
                     docker tag website-docker-demo:latest %IMAGE_URI%
                     docker tag website-docker-demo:latest %LATEST_URI%
-                '''
+                """
             }
         }
 
         stage('Login to ECR') {
             steps {
-                bat '''
+                bat """
                     aws ecr get-login-password --region %AWS_REGION% > password.txt
                     type password.txt | docker login --username AWS --password-stdin %AWS_ACCOUNT_ID%.dkr.ecr.%AWS_REGION%.amazonaws.com
-                '''
+                """
             }
         }
 
         stage('Push Image to ECR') {
             steps {
-                bat '''
+                bat """
                     docker push %IMAGE_URI%
                     docker push %LATEST_URI%
-                '''
+                """
             }
         }
 
         stage('Deploy to EC2') {
             steps {
-                echo 'Deploy stage skipped on Windows Jenkins. Use Linux agent for full deploy.'
+                echo 'Skipping deploy on Windows agent. Use Linux agent for SSH + Docker deploy.'
             }
         }
     }
