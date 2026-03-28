@@ -35,10 +35,16 @@ pipeline {
 
         stage('Login to ECR') {
             steps {
-                bat """
-                    aws ecr get-login-password --region %AWS_REGION% > password.txt
-                    type password.txt | docker login --username AWS --password-stdin %AWS_ACCOUNT_ID%.dkr.ecr.%AWS_REGION%.amazonaws.com
-                """
+                // Inject AWS keys from Jenkins credentials
+                withCredentials([usernamePassword(credentialsId: 'aws-ecr-creds', 
+                                                 usernameVariable: 'AWS_ACCESS_KEY_ID', 
+                                                 passwordVariable: 'AWS_SECRET_ACCESS_KEY')]) {
+                    bat """
+                        set AWS_REGION=%AWS_REGION%
+                        aws ecr get-login-password --region %AWS_REGION% ^
+                        | docker login --username AWS --password-stdin %AWS_ACCOUNT_ID%.dkr.ecr.%AWS_REGION%.amazonaws.com
+                    """
+                }
             }
         }
 
@@ -53,14 +59,24 @@ pipeline {
 
         stage('Deploy to EC2') {
             steps {
-                echo 'Skipping deploy on Windows agent. Use Linux agent for SSH + Docker deploy.'
+                sshagent(['deploy-ec2-key']) {
+                    bat """
+                        ssh -o StrictHostKeyChecking=no ubuntu@%DEPLOY_SERVER% " ^
+                        aws ecr get-login-password --region %AWS_REGION% ^
+                        | docker login --username AWS --password-stdin %AWS_ACCOUNT_ID%.dkr.ecr.%AWS_REGION%.amazonaws.com && ^
+                        docker pull %LATEST_URI% && ^
+                        docker stop website-demo || true && ^
+                        docker rm website-demo || true && ^
+                        docker run -d --name website-demo -p 80:80 %LATEST_URI% "
+                    """
+                }
             }
         }
     }
 
     post {
         success {
-            echo 'Build and push completed successfully'
+            echo 'Website deployed successfully'
         }
         failure {
             echo 'Pipeline failed'
